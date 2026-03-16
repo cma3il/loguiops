@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MX Master 3S · Config Generator</title>
+  <!-- Dependencies pinned to exact versions.
+       For production use, add integrity="sha384-..." SRI hashes after computing them
+       from the downloaded files:  openssl dgst -sha384 -binary <file> | openssl base64 -A
+       Note: cdn.tailwindcss.com is a runtime compiler and does not support SRI;
+       for production, compile Tailwind offline and serve a static stylesheet. -->
+  <script crossorigin="anonymous" src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone@7.25.9/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body, #root {
+      height: 100%;
+      overflow: hidden;
+      background: #09090b;
+      color: #e4e4e7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #18181b; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #06b6d4; }
+
+    /* Range input */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: #27272a;
+      border-radius: 2px;
+      outline: none;
+      width: 100%;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 2px;
+    }
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      background: #27272a;
+      border-radius: 2px;
+    }
+    input[type="range"]::-moz-range-progress {
+      height: 4px;
+      background: #06b6d4;
+      border-radius: 2px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #06b6d4;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(6,182,212,0.5);
+    }
+
+    /* Code output */
+    .cfg-code {
+      font-family: "Fira Code", "Cascadia Code", "SF Mono", "Courier New", monospace;
+      font-size: 11.5px;
+      line-height: 1.65;
+      white-space: pre;
+      tab-size: 2;
+    }
+    .tk-kw  { color: #c792ea; }
+    .tk-str { color: #c3e88d; }
+    .tk-num { color: #f78c6c; }
+    .tk-bl  { color: #89ddff; }
+    .tk-cmt { color: #4a5568; font-style: italic; }
+    .tk-prop{ color: #82aaff; }
+    .tk-op  { color: #89ddff; }
+
+    /* Node pulse */
+    @keyframes pulse-ring {
+      0%, 100% { transform: translate(-50%, -50%) scale(1);    opacity: .6; }
+      50%       { transform: translate(-50%, -50%) scale(1.65); opacity: .15; }
+    }
+    .btn-pulse {
+      animation: pulse-ring 2.2s ease-in-out infinite;
+    }
+    .btn-pulse-active { animation: none; }
+
+    /* Panel slide in from left */
+    @keyframes slideLeft {
+      from { transform: translateX(-32px); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+    .panel-enter-left { animation: slideLeft .18s ease-out both; }
+
+    /* Panel slide in from right */
+    @keyframes slideRight {
+      from { transform: translateX(32px); opacity: 0; }
+      to   { transform: translateX(0);   opacity: 1; }
+    }
+    .panel-enter { animation: slideRight .18s ease-out both; }
+
+    /* Mouse float / breathe animation */
+    @keyframes mouseFloat {
+      0%, 100% { transform: translateY(0px); }
+      50%      { transform: translateY(-6px); }
+    }
+    .mouse-float { animation: mouseFloat 4s ease-in-out infinite; }
+
+    /* Fade-in */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn .35s ease-out both; }
+
+    /* Modal animation */
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .modal-enter { animation: modalIn .2s ease-out both; }
+
+    /* Hover scale on interactive elements */
+    .hover-scale { transition: transform 0.15s ease; }
+    .hover-scale:hover { transform: scale(1.03); }
+
+    /* Glow on active node */
+    .node-active-glow { filter: drop-shadow(0 0 6px #06b6d4); }
+
+    /* Tooltip */
+    .svg-tooltip {
+      pointer-events: none;
+      transition: opacity .15s;
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+/* ── Helpers ────────────────────────────────────────────────────────── */
+
+/** Returns an inline style for a range input that fills the track on WebKit. */
+function trackStyle(value, min, max) {
+  const pct = ((value - min) / (max - min)) * 100;
+  return {
+    background: `linear-gradient(to right, #06b6d4 ${pct}%, #27272a ${pct}%)`,
+  };
+}
+
+/* ── Constants ─────────────────────────────────────────────────────── */
+
+const BUTTONS = [
+  {
+    id: 'top',
+    cid: '0xc4',
+    label: 'Top Button',
+    desc: 'Mode switch / custom action',
+    left: 44, top: 24,
+    supportsGestures: false,
+  },
+  {
+    id: 'thumb',
+    cid: '0xc3',
+    label: 'Thumb Button',
+    desc: 'Gesture button (thumb wing)',
+    left: 35, top: 75,
+    supportsGestures: true,
+  },
+  {
+    id: 'forward',
+    cid: '0x56',
+    label: 'Forward',
+    desc: 'Browser forward / custom action',
+    left: 31, top: 50,
+    supportsGestures: false,
+  },
+  {
+    id: 'back',
+    cid: '0x53',
+    label: 'Back',
+    desc: 'Browser back / custom action',
+    left: 40, top: 53,
+    supportsGestures: false,
+  },
+  {
+    id: 'hscroll',
+    label: 'H-Scroll Wheel',
+    desc: 'Horizontal thumb scroll wheel',
+    left: 35, top: 43,
+    supportsGestures: false,
+    isThumbWheel: true,
+  },
+];
+
+const ACTION_TYPES  = ['Keypress', 'ToggleSmartShift', 'Gestures'];
+const GESTURE_DIRS  = ['Up', 'Down', 'Left', 'Right'];
+const DIR_ARROW     = { Up: '↑', Down: '↓', Left: '←', Right: '→' };
+
+const COMMON_KEYS = [
+  'KEY_LEFTMETA','KEY_RIGHTMETA',
+  'KEY_LEFTCTRL','KEY_RIGHTCTRL',
+  'KEY_LEFTALT','KEY_RIGHTALT',
+  'KEY_LEFTSHIFT','KEY_RIGHTSHIFT',
+  'KEY_SPACE','KEY_RETURN','KEY_TAB','KEY_ESC','KEY_DELETE','KEY_BACKSPACE',
+  'KEY_UP','KEY_DOWN','KEY_LEFT','KEY_RIGHT',
+  'KEY_F1','KEY_F2','KEY_F3','KEY_F4','KEY_F5','KEY_F6',
+  'KEY_F7','KEY_F8','KEY_F9','KEY_F10','KEY_F11','KEY_F12',
+  'KEY_BACK','KEY_FORWARD',
+  'KEY_VOLUMEUP','KEY_VOLUMEDOWN','KEY_MUTE',
+  'KEY_PLAYPAUSE','KEY_NEXTSONG','KEY_PREVIOUSSONG',
+  'KEY_BRIGHTNESSUP','KEY_BRIGHTNESSDOWN',
+  'KEY_COPY','KEY_PASTE','KEY_CUT','KEY_UNDO','KEY_REDO',
+  'KEY_PRINT','KEY_SCROLLLOCK','KEY_NUMLOCK',
+  'KEY_HOME','KEY_END','KEY_PAGEUP','KEY_PAGEDOWN',
+  'KEY_A','KEY_B','KEY_C','KEY_D','KEY_E','KEY_W','KEY_S',
+  'KEY_1','KEY_2','KEY_3','KEY_4','KEY_5',
+];
+
+const DEFAULT_BTN_CONFIGS = {
+  top:     { actionType: 'Keypress',        keys: ['KEY_LEFTMETA', 'KEY_SPACE'] },
+  thumb:   {
+    actionType: 'Gestures',
+    pressAction: { keys: [] },
+    gestures: {
+      Up:    { keys: ['KEY_UP'] },
+      Down:  { keys: ['KEY_DOWN'] },
+      Left:  { keys: ['KEY_LEFT'] },
+      Right: { keys: ['KEY_RIGHT'] },
+    },
+  },
+  forward: { actionType: 'Keypress', keys: ['KEY_FORWARD'] },
+  back:    { actionType: 'Keypress', keys: ['KEY_BACK'] },
+  hscroll: { mode: 'scroll', invert: false, hires: false, speed: 1 },
+};
+
+const DEFAULT_GLOBAL = {
+  dpi: 1600,
+  smartShiftOn: true,
+  smartShiftThreshold: 30,
+  smartShiftTorque: 50,
+};
+
+/* ── Config Generator ──────────────────────────────────────────────── */
+
+function generateConfig(global, buttons) {
+  const { dpi, smartShiftOn, smartShiftThreshold, smartShiftTorque } = global;
+  const ind = (n) => '  '.repeat(n);
+  const lines = [];
+
+  lines.push('devices:');
+  lines.push('({');
+  lines.push(`${ind(1)}name: "MX Master 3S";`);
+  lines.push('');
+  lines.push(`${ind(1)}smartshift:`);
+  lines.push(`${ind(1)}{`);
+  lines.push(`${ind(2)}on: ${smartShiftOn ? 'true' : 'false'};`);
+  lines.push(`${ind(2)}threshold: ${smartShiftThreshold};`);
+  lines.push(`${ind(2)}torque: ${smartShiftTorque};`);
+  lines.push(`${ind(1)}};`);
+  lines.push('');
+  lines.push(`${ind(1)}hiresscroll:`);
+  lines.push(`${ind(1)}{`);
+  lines.push(`${ind(2)}hires: true;`);
+  lines.push(`${ind(2)}invert: false;`);
+  lines.push(`${ind(2)}target: false;`);
+  lines.push(`${ind(1)}};`);
+  lines.push('');
+
+  // Thumbwheel (horizontal scroll) config
+  const hscroll = buttons.hscroll || { mode: 'scroll', invert: false, hires: false, speed: 1 };
+  lines.push(`${ind(1)}thumbwheel:`);
+  lines.push(`${ind(1)}{`);
+  lines.push(`${ind(2)}divert: ${hscroll.mode === 'volume' ? 'true' : 'false'};`);
+  lines.push(`${ind(2)}invert: ${hscroll.invert ? 'true' : 'false'};`);
+
+  if (hscroll.mode === 'volume') {
+    lines.push(`${ind(2)}left:`);
+    lines.push(`${ind(2)}{`);
+    lines.push(`${ind(3)}mode: "OnInterval";`);
+    lines.push(`${ind(3)}interval: ${hscroll.speed || 1};`);
+    lines.push(`${ind(3)}action =`);
+    lines.push(`${ind(3)}{`);
+    lines.push(`${ind(4)}type: "Keypress";`);
+    lines.push(`${ind(4)}keys: ["KEY_VOLUMEDOWN"];`);
+    lines.push(`${ind(3)}};`);
+    lines.push(`${ind(2)}};`);
+    lines.push(`${ind(2)}right:`);
+    lines.push(`${ind(2)}{`);
+    lines.push(`${ind(3)}mode: "OnInterval";`);
+    lines.push(`${ind(3)}interval: ${hscroll.speed || 1};`);
+    lines.push(`${ind(3)}action =`);
+    lines.push(`${ind(3)}{`);
+    lines.push(`${ind(4)}type: "Keypress";`);
+    lines.push(`${ind(4)}keys: ["KEY_VOLUMEUP"];`);
+    lines.push(`${ind(3)}};`);
+    lines.push(`${ind(2)}};`);
+  }
+
+  lines.push(`${ind(1)}};`);
+  lines.push('');
+
+  lines.push(`${ind(1)}dpi: ${dpi};`);
+  lines.push('');
+  lines.push(`${ind(1)}buttons:`);
+  lines.push(`${ind(1)}(`);
+
+  const configurableButtons = BUTTONS.filter(b => !b.isThumbWheel);
+  configurableButtons.forEach((btn, i) => {
+    const cfg = buttons[btn.id];
+    const comma = i < configurableButtons.length - 1 ? ',' : '';
+    lines.push(`${ind(2)}{`);
+    lines.push(`${ind(3)}cid: ${btn.cid};`);
+    lines.push(`${ind(3)}action =`);
+    lines.push(`${ind(3)}{`);
+
+    if (cfg.actionType === 'Keypress') {
+      lines.push(`${ind(4)}type: "Keypress";`);
+      const ks = (cfg.keys || []).map(k => `"${k}"`).join(', ');
+      lines.push(`${ind(4)}keys: [${ks}];`);
+    } else if (cfg.actionType === 'ToggleSmartShift') {
+      lines.push(`${ind(4)}type: "ToggleSmartShift";`);
+    } else if (cfg.actionType === 'Gestures') {
+      lines.push(`${ind(4)}type: "Gestures";`);
+      lines.push(`${ind(4)}gestures:`);
+      lines.push(`${ind(4)}(`);
+
+      const allDirs = [];
+
+      // Press action (NoPress) — fires on simple press without gesture
+      const pressAction = cfg.pressAction;
+      if (pressAction && pressAction.keys && pressAction.keys.length > 0) {
+        allDirs.push({ dir: 'None', mode: 'OnRelease', keys: pressAction.keys });
+      }
+
+      // Directional gestures
+      const dirs = Object.entries(cfg.gestures || {});
+      dirs.forEach(([dir, g]) => {
+        const gc = g && g.keys && g.keys.length > 0 ? g : { keys: [] };
+        allDirs.push({ dir: dir, mode: 'OnRelease', keys: gc.keys });
+      });
+
+      allDirs.forEach((item, gi) => {
+        const gc2 = gi < allDirs.length - 1 ? ',' : '';
+        lines.push(`${ind(5)}{`);
+        lines.push(`${ind(6)}direction: "${item.dir}";`);
+        lines.push(`${ind(6)}mode: "${item.mode}";`);
+        lines.push(`${ind(6)}action =`);
+        lines.push(`${ind(6)}{`);
+        lines.push(`${ind(7)}type: "Keypress";`);
+        const ks = item.keys.map(k => `"${k}"`).join(', ');
+        lines.push(`${ind(7)}keys: [${ks}];`);
+        lines.push(`${ind(6)}};`);
+        lines.push(`${ind(5)}}${gc2}`);
+      });
+
+      lines.push(`${ind(4)});`);
+    }
+
+    lines.push(`${ind(3)}};`);
+    lines.push(`${ind(2)}}${comma}`);
+  });
+
+  lines.push(`${ind(1)});`);
+  lines.push('});');
+  return lines.join('\n');
+}
+
+/* ── Syntax Highlighter ─────────────────────────────────────────────── */
+
+function highlight(raw) {
+  return raw
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // strings
+    .replace(/"([^"]*)"/g, '<span class="tk-str">"$1"</span>')
+    // hex
+    .replace(/\b(0x[0-9a-fA-F]+)\b/g, '<span class="tk-num">$1</span>')
+    // booleans
+    .replace(/\b(true|false)\b/g, '<span class="tk-bl">$1</span>')
+    // standalone numbers (after colon/space)
+    .replace(/(?<=:\s)(\d+)(?=;)/g, '<span class="tk-num">$1</span>')
+    // property names (word followed by colon or =)
+    .replace(/\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*[=:])/g, '<span class="tk-prop">$1</span>')
+    // top-level section names
+    .replace(/\b(devices|smartshift|hiresscroll|thumbwheel|buttons|action|gestures)\b/g,
+      '<span class="tk-kw">$1</span>')
+    // braces and punctuation
+    .replace(/([{}();,])/g, '<span class="tk-op">$1</span>');
+}
+
+/* ── Inline Icon Components ─────────────────────────────────────────── */
+
+const Icon = {
+  Mouse: () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="2" width="14" height="20" rx="7"/>
+      <path d="M12 6v4"/><path d="M5 10h14"/>
+    </svg>
+  ),
+  Settings: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  ),
+  X: ({ size = 14 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  ),
+  Plus: () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  ),
+  Copy: () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>
+  ),
+  Check: () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  ),
+  Download: () => (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+  ),
+  ChevronRight: () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  ),
+  Code: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6"/>
+      <polyline points="8 6 2 12 8 18"/>
+    </svg>
+  ),
+  Upload: () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+      <polyline points="17 8 12 3 7 8"/>
+      <line x1="12" y1="3" x2="12" y2="15"/>
+    </svg>
+  ),
+};
+
+/* ── Mouse image with interactive overlay nodes ────────────────────── */
+
+function MouseVisual({ selectedId, onSelect }) {
+  const [hovered, setHovered] = useState(null);
+
+  return (
+    <div className="relative mouse-float" style={{ width: '100%' }}>
+      {/* TODO: Replace with a locally-hosted asset for long-term reliability */}
+      <img
+        src="https://github.com/user-attachments/assets/7f674001-1531-49a0-b3b8-df11235a2f23"
+        alt="Logitech MX Master 3S"
+        className="w-full h-auto block select-none"
+        draggable="false"
+      />
+
+      {BUTTONS.map(btn => {
+        const isActive  = selectedId === btn.id;
+        const isHovered = hovered === btn.id;
+        const show = isActive || isHovered;
+
+        return (
+          <div
+            key={btn.id}
+            onClick={() => onSelect(btn.id === selectedId ? null : btn.id)}
+            onMouseEnter={() => setHovered(btn.id)}
+            onMouseLeave={() => setHovered(null)}
+            style={{
+              position: 'absolute',
+              left: btn.left + '%',
+              top: btn.top + '%',
+              transform: 'translate(-50%, -50%)',
+              cursor: 'pointer',
+              zIndex: isActive ? 20 : 10,
+            }}
+          >
+            {/* Glow aura */}
+            {show && (
+              <div style={{
+                position: 'absolute',
+                left: '50%', top: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 44, height: 44, borderRadius: '50%',
+                background: isActive ? 'rgba(6,182,212,0.18)' : 'rgba(6,182,212,0.1)',
+              }} />
+            )}
+
+            {/* Pulse ring (idle) */}
+            {!isActive && (
+              <div
+                className="btn-pulse"
+                style={{
+                  position: 'absolute',
+                  left: '50%', top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 20, height: 20, borderRadius: '50%',
+                  border: '1px solid #06b6d4',
+                  opacity: 0.45,
+                }}
+              />
+            )}
+
+            {/* Main node */}
+            <div style={{
+              width: isActive ? 16 : 12,
+              height: isActive ? 16 : 12,
+              borderRadius: '50%',
+              background: isActive ? '#06b6d4' : isHovered ? '#0891b2' : '#18181a',
+              border: (isActive ? '1.5px' : '1.2px') + ' solid ' + (isActive ? '#67e8f9' : '#06b6d4'),
+              boxShadow: isActive ? '0 0 12px rgba(6,182,212,0.6)' : 'none',
+              position: 'relative', zIndex: 2,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {isActive && (
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', opacity: 0.85 }} />
+              )}
+            </div>
+
+            {/* Label */}
+            {show && (
+              <div style={{
+                position: 'absolute', left: '50%', top: '100%',
+                transform: 'translateX(-50%)', marginTop: 6,
+                whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 4,
+                background: '#18181a', fontSize: 9, fontFamily: 'sans-serif',
+                color: isActive ? '#67e8f9' : '#a5f3fc',
+                fontWeight: isActive ? 'bold' : 'normal', zIndex: 30,
+              }}>
+                {btn.label}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Toggle Switch ──────────────────────────────────────────────────── */
+
+function Toggle({ checked, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`relative w-10 h-5 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${
+        checked ? 'bg-cyan-500' : 'bg-zinc-700'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+          checked ? 'translate-x-5 left-0.5' : 'translate-x-0 left-0.5'
+        }`}
+      />
+    </button>
+  );
+}
+
+/* ── Key Tag ────────────────────────────────────────────────────────── */
+
+function KeyTag({ k, onRemove }) {
+  return (
+    <span className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 text-xs font-mono
+                     bg-zinc-800 text-cyan-300 border border-zinc-700 rounded">
+      {k}
+      {onRemove && (
+        <button
+          onClick={() => onRemove(k)}
+          className="text-zinc-600 hover:text-red-400 transition-colors"
+        >
+          <Icon.X size={10}/>
+        </button>
+      )}
+    </span>
+  );
+}
+
+/* ── Key Selector ───────────────────────────────────────────────────── */
+
+function KeySelector({ keys, onChange }) {
+  const [val, setVal] = useState('');
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef(null);
+
+  const suggestions = useMemo(() =>
+    COMMON_KEYS.filter(k =>
+      k.toLowerCase().includes(val.toLowerCase()) && !keys.includes(k)
+    ).slice(0, 9),
+    [val, keys]
+  );
+
+  const add = (raw) => {
+    if (!raw) return;
+    const k = raw.toUpperCase().startsWith('KEY_') ? raw.toUpperCase() : `KEY_${raw.toUpperCase()}`;
+    if (!keys.includes(k)) onChange([...keys, k]);
+    setVal('');
+    setOpen(false);
+  };
+
+  const remove = (k) => onChange(keys.filter(x => x !== k));
+
+  return (
+    <div className="space-y-2">
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+        {keys.map(k => <KeyTag key={k} k={k} onRemove={remove}/>)}
+      </div>
+
+      {/* Input + dropdown */}
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          value={val}
+          onChange={e => { setVal(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 160)}
+          onKeyDown={e => { if (e.key === 'Enter' && val) add(val); }}
+          placeholder="Add key… (e.g. KEY_SPACE)"
+          className="w-full bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs
+                     rounded-md px-3 py-1.5 font-mono placeholder-zinc-600 outline-none
+                     focus:border-cyan-500/70 transition-colors"
+        />
+        {open && suggestions.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border
+                          border-zinc-700 rounded-md shadow-2xl z-50 overflow-hidden">
+            {suggestions.map(k => (
+              <button
+                key={k}
+                className="w-full text-left px-3 py-1.5 text-xs font-mono text-zinc-400
+                           hover:bg-zinc-800 hover:text-cyan-300 transition-colors"
+                onMouseDown={() => add(k)}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Gesture Direction Row ──────────────────────────────────────────── */
+
+function GestureRow({ dir, gesture, onChange }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 p-3 bg-zinc-900/40 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-base text-cyan-400 w-5 text-center">{DIR_ARROW[dir]}</span>
+        <span className="text-xs font-medium text-zinc-300">{dir}</span>
+      </div>
+      <KeySelector
+        keys={gesture.keys || []}
+        onChange={keys => onChange({ ...gesture, keys })}
+      />
+    </div>
+  );
+}
+
+/* ── Config Side Panel ──────────────────────────────────────────────── */
+
+function ButtonPanel({ btnId, configs, onChangeCfg, onClose }) {
+  const btn = BUTTONS.find(b => b.id === btnId);
+  if (!btn) return null;
+  const cfg = configs[btnId] || { actionType: 'Keypress', keys: [] };
+
+  const setType = (type) => {
+    if (type === 'Gestures') {
+      onChangeCfg(btnId, {
+        actionType: 'Gestures',
+        pressAction: { keys: [] },
+        gestures: {
+          Up:    { keys: ['KEY_UP'] },
+          Down:  { keys: ['KEY_DOWN'] },
+          Left:  { keys: ['KEY_LEFT'] },
+          Right: { keys: ['KEY_RIGHT'] },
+        },
+      });
+    } else if (type === 'Keypress') {
+      onChangeCfg(btnId, { actionType: 'Keypress', keys: [] });
+    } else {
+      onChangeCfg(btnId, { actionType: type });
+    }
+  };
+
+  /* ── Thumb-wheel (hscroll) panel ── */
+  if (btn.isThumbWheel) {
+    return (
+      <div className="h-full flex flex-col panel-enter">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800/80">
+          <div>
+            <p className="text-sm font-semibold text-white">{btn.label}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{btn.desc}</p>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-white transition-colors">
+            <Icon.X size={13}/>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* Mode */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Mode</label>
+            <div className="space-y-1.5">
+              {[
+                { value: 'scroll', label: 'Normal Horizontal Scrolling' },
+                { value: 'volume', label: 'Volume Control' },
+              ].map(opt => (
+                <button key={opt.value}
+                  onClick={() => onChangeCfg(btnId, { ...cfg, mode: opt.value })}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg border text-sm transition-all ${
+                    cfg.mode === opt.value
+                      ? 'border-cyan-500/50 bg-cyan-500/8 text-cyan-300'
+                      : 'border-zinc-800 bg-zinc-900/40 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                  }`}>
+                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    cfg.mode === opt.value ? 'bg-cyan-400' : 'bg-zinc-700'
+                  }`}/>
+                  <span className="text-xs">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Invert */}
+          <div className="flex items-center justify-between py-2 border-b border-zinc-800/50">
+            <div>
+              <p className="text-xs text-zinc-300 font-medium">Invert Direction</p>
+              <p className="text-[10px] text-zinc-600 mt-0.5">Reverse scroll direction</p>
+            </div>
+            <Toggle checked={cfg.invert || false} onChange={v => onChangeCfg(btnId, { ...cfg, invert: v })}/>
+          </div>
+
+          {/* High-Res */}
+          <div className="flex items-center justify-between py-2 border-b border-zinc-800/50">
+            <div>
+              <p className="text-xs text-zinc-300 font-medium">High Resolution</p>
+              <p className="text-[10px] text-zinc-600 mt-0.5">Enable high-res scrolling</p>
+            </div>
+            <Toggle checked={cfg.hires || false} onChange={v => onChangeCfg(btnId, { ...cfg, hires: v })}/>
+          </div>
+
+          {/* Speed */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-zinc-300 font-medium">Speed Multiplier</label>
+              <span className="text-xs font-mono text-cyan-400">{cfg.speed || 1}</span>
+            </div>
+            <input type="range" min="1" max="10" step="1"
+              value={cfg.speed || 1}
+              style={trackStyle(cfg.speed || 1, 1, 10)}
+              onChange={e => onChangeCfg(btnId, { ...cfg, speed: +e.target.value })}/>
+            <div className="flex justify-between text-[10px] text-zinc-600">
+              <span>Slow</span><span>Fast</span>
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              <span className="text-zinc-400 font-medium">Volume Control</span> diverts the
+              thumb wheel to send volume keys.
+              <span className="text-zinc-400 font-medium"> Normal</span> uses default horizontal
+              scrolling.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Regular button panel ── */
+  return (
+    <div className="h-full flex flex-col panel-enter">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800/80">
+        <div>
+          <p className="text-sm font-semibold text-white">{btn.label}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">{btn.desc}</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-7 h-7 flex items-center justify-center rounded-full
+                     bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-white transition-colors"
+        >
+          <Icon.X size={13}/>
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+        {/* Action Type */}
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
+            Action Type
+          </label>
+          <div className="space-y-1.5">
+            {ACTION_TYPES.filter(t => t !== 'Gestures' || btn.supportsGestures).map(type => (
+              <button
+                key={type}
+                onClick={() => setType(type)}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg border text-sm
+                            transition-all ${
+                  cfg.actionType === type
+                    ? 'border-cyan-500/50 bg-cyan-500/8 text-cyan-300'
+                    : 'border-zinc-800 bg-zinc-900/40 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                }`}
+              >
+                <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  cfg.actionType === type ? 'bg-cyan-400' : 'bg-zinc-700'
+                }`}/>
+                <span className="text-xs">{type}</span>
+                {type === 'Gestures' && (
+                  <span className="ml-auto text-[10px] text-zinc-600">↑↓←→</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Keypress config */}
+        {cfg.actionType === 'Keypress' && (
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
+              Keys (pressed simultaneously)
+            </label>
+            <KeySelector
+              keys={cfg.keys || []}
+              onChange={keys => onChangeCfg(btnId, { ...cfg, keys })}
+            />
+          </div>
+        )}
+
+        {/* ToggleSmartShift info */}
+        {cfg.actionType === 'ToggleSmartShift' && (
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3.5">
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Pressing this button toggles the scroll wheel between
+              <span className="text-cyan-400"> ratchet</span> and
+              <span className="text-cyan-400"> free-spin</span> modes.
+            </p>
+          </div>
+        )}
+
+        {/* Gestures config — press action + directional */}
+        {cfg.actionType === 'Gestures' && (
+          <div className="space-y-4">
+            {/* Button press action (NoPress) */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
+                Button Press Action
+              </label>
+              <div className="rounded-lg border border-zinc-800 p-3 bg-zinc-900/40 space-y-2">
+                <p className="text-[10px] text-zinc-500 leading-relaxed">
+                  Keypress when button is pressed without gesturing
+                </p>
+                <KeySelector
+                  keys={(cfg.pressAction || {}).keys || []}
+                  onChange={keys => onChangeCfg(btnId, {
+                    ...cfg,
+                    pressAction: { keys },
+                  })}
+                />
+              </div>
+            </div>
+
+            {/* Directional gestures */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
+                Gesture Actions
+              </label>
+              <div className="space-y-2">
+                {GESTURE_DIRS.map(dir => (
+                  <GestureRow
+                    key={dir}
+                    dir={dir}
+                    gesture={(cfg.gestures || {})[dir] || { keys: [] }}
+                    onChange={g => onChangeCfg(btnId, {
+                      ...cfg,
+                      gestures: { ...(cfg.gestures || {}), [dir]: g },
+                    })}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CID footer */}
+        <div className="pt-3 border-t border-zinc-800/50">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-zinc-600 uppercase tracking-wider">CID</span>
+            <span className="text-xs font-mono text-zinc-500">{btn.cid}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Global Settings Panel ──────────────────────────────────────────── */
+
+function GlobalPanel({ cfg, onChange }) {
+  return (
+    <div className="h-full flex flex-col panel-enter-left">
+      <div className="flex items-center gap-2 px-5 py-3.5 border-b border-zinc-800/80">
+        <Icon.Settings/>
+        <span className="text-sm font-semibold text-white">Global Settings</span>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
+
+        {/* DPI */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-zinc-300 font-medium">Sensitivity (DPI)</label>
+            <span className="text-xs font-mono text-cyan-400">{cfg.dpi.toLocaleString()}</span>
+          </div>
+          <input
+            type="range" min="400" max="8000" step="200"
+            value={cfg.dpi}
+            style={trackStyle(cfg.dpi, 400, 8000)}
+            onChange={e => onChange({ ...cfg, dpi: +e.target.value })}
+          />
+          <div className="flex justify-between text-[10px] text-zinc-600">
+            <span>400</span><span>4,200</span><span>8,000</span>
+          </div>
+        </div>
+
+        {/* SmartShift on/off */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between py-2 border-b border-zinc-800/50">
+            <div>
+              <p className="text-xs text-zinc-300 font-medium">SmartShift</p>
+              <p className="text-[10px] text-zinc-600 mt-0.5">Auto-switch scroll modes by speed</p>
+            </div>
+            <Toggle checked={cfg.smartShiftOn} onChange={on => onChange({ ...cfg, smartShiftOn: on })}/>
+          </div>
+
+          {cfg.smartShiftOn && (
+            <>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-zinc-300">Threshold</label>
+                  <span className="text-xs font-mono text-cyan-400">{cfg.smartShiftThreshold}</span>
+                </div>
+                <input
+                  type="range" min="1" max="255"
+                  value={cfg.smartShiftThreshold}
+                  style={trackStyle(cfg.smartShiftThreshold, 1, 255)}
+                  onChange={e => onChange({ ...cfg, smartShiftThreshold: +e.target.value })}
+                />
+                <div className="flex justify-between text-[10px] text-zinc-600">
+                  <span>Sensitive</span><span>Firm</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-zinc-300">Torque</label>
+                  <span className="text-xs font-mono text-cyan-400">{cfg.smartShiftTorque}</span>
+                </div>
+                <input
+                  type="range" min="1" max="255"
+                  value={cfg.smartShiftTorque}
+                  style={trackStyle(cfg.smartShiftTorque, 1, 255)}
+                  onChange={e => onChange({ ...cfg, smartShiftTorque: +e.target.value })}
+                />
+                <div className="flex justify-between text-[10px] text-zinc-600">
+                  <span>1</span><span>255</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* HiRes scroll note */}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+          <p className="text-[10px] text-zinc-500 leading-relaxed">
+            <span className="text-zinc-400 font-medium">HiRes scroll</span> and
+            <span className="text-zinc-400 font-medium"> invert</span> are fixed at
+            <span className="font-mono text-zinc-400"> true / false</span> in the output.
+            Modify the generated config as needed.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Config Output ──────────────────────────────────────────────────── */
+
+function ConfigOutput({ code }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = code;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const download = () => {
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'logid.cfg';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800/60
+                      bg-zinc-950 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500/60"/>
+            <div className="w-3 h-3 rounded-full bg-yellow-500/60"/>
+            <div className="w-3 h-3 rounded-full bg-green-500/60"/>
+          </div>
+          <span className="ml-1 text-[11px] text-zinc-500 font-mono">/etc/logid.cfg</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={download}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-md
+                       bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700
+                       hover:border-zinc-600 transition-all"
+          >
+            <Icon.Download/> Save
+          </button>
+          <button
+            onClick={copy}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-md
+                        border transition-all ${
+              copied
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-700 hover:border-zinc-600'
+            }`}
+          >
+            {copied ? <><Icon.Check/> Copied!</> : <><Icon.Copy/> Copy</>}
+          </button>
+        </div>
+      </div>
+      {/* Code */}
+      <div className="flex-1 overflow-auto px-4 py-3 bg-[#0c0c0e]">
+        <pre
+          className="cfg-code"
+          dangerouslySetInnerHTML={{ __html: highlight(code) }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ── Config Parser (logid.cfg → state) ─────────────────────────────── */
+
+function parseLogidConfig(text) {
+  // Strip comments
+  text = text.replace(/#[^\n]*/g, '').replace(/\/\/[^\n]*/g, '');
+
+  // Tokenize
+  const tokens = [];
+  let i = 0;
+  while (i < text.length) {
+    if (/\s/.test(text[i])) { i++; continue; }
+    if (text[i] === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j++;
+      tokens.push({ t: 's', v: text.substring(i + 1, j) });
+      i = j + 1;
+      continue;
+    }
+    if ('{}()[];:=,'.includes(text[i])) {
+      tokens.push({ t: 'p', v: text[i] });
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < text.length && /[a-zA-Z0-9_.x-]/.test(text[j])) j++;
+    if (j > i) {
+      const w = text.substring(i, j);
+      if (w === 'true' || w === 'false') tokens.push({ t: 'b', v: w === 'true' });
+      else if (/^0x[0-9a-fA-F]+$/i.test(w)) tokens.push({ t: 'n', v: parseInt(w, 16) });
+      else if (/^\d+$/.test(w)) tokens.push({ t: 'n', v: parseInt(w, 10) });
+      else tokens.push({ t: 'i', v: w });
+      i = j;
+      continue;
+    }
+    i++;
+  }
+
+  let pos = 0;
+  const peek = () => pos < tokens.length ? tokens[pos] : null;
+  const next = () => tokens[pos++];
+  const is   = (t, v) => { const tk = peek(); return tk && tk.t === t && (v === undefined || tk.v === v); };
+  const skip = (t, v) => { if (is(t, v)) next(); };
+
+  function parseValue() {
+    const tk = peek();
+    if (!tk) return undefined;
+    if (tk.t === 's' || tk.t === 'n' || tk.t === 'b') { next(); return tk.v; }
+    if (is('p', '{')) return parseGroup();
+    if (is('p', '(')) return parseList();
+    if (is('p', '[')) return parseArray();
+    return undefined;
+  }
+
+  function parseGroup() {
+    next(); // {
+    const obj = {};
+    while (peek() && !is('p', '}')) {
+      if (!peek() || peek().t !== 'i') { next(); continue; }
+      const name = next().v;
+      skip('p'); // : or =
+      const val = parseValue();
+      if (val !== undefined) obj[name] = val;
+      skip('p', ';');
+    }
+    skip('p', '}');
+    return obj;
+  }
+
+  function parseList() {
+    next(); // (
+    const arr = [];
+    while (peek() && !is('p', ')')) {
+      const val = parseValue();
+      if (val !== undefined) arr.push(val);
+      skip('p', ',');
+    }
+    skip('p', ')');
+    return arr;
+  }
+
+  function parseArray() {
+    next(); // [
+    const arr = [];
+    while (peek() && !is('p', ']')) {
+      const val = parseValue();
+      if (val !== undefined) arr.push(val);
+      skip('p', ',');
+    }
+    skip('p', ']');
+    return arr;
+  }
+
+  // Top-level settings
+  const root = {};
+  while (pos < tokens.length) {
+    if (peek() && peek().t === 'i') {
+      const name = next().v;
+      skip('p'); // : or =
+      const val = parseValue();
+      if (val !== undefined) root[name] = val;
+      skip('p', ';');
+    } else { next(); }
+  }
+  return root;
+}
+
+// Build CID→button-id map from BUTTONS array
+const CID_TO_BTN = Object.fromEntries(
+  BUTTONS.filter(b => b.cid).map(b => [parseInt(b.cid, 16), b.id])
+);
+
+function importConfig(parsed) {
+  const devices = parsed.devices;
+  if (!devices || !Array.isArray(devices) || !devices.length) return null;
+  const dev = devices[0];
+
+  const global = {
+    dpi:                 dev.dpi ?? DEFAULT_GLOBAL.dpi,
+    smartShiftOn:        dev.smartshift?.on ?? DEFAULT_GLOBAL.smartShiftOn,
+    smartShiftThreshold: dev.smartshift?.threshold ?? DEFAULT_GLOBAL.smartShiftThreshold,
+    smartShiftTorque:    dev.smartshift?.torque ?? DEFAULT_GLOBAL.smartShiftTorque,
+  };
+
+  const buttons = { ...DEFAULT_BTN_CONFIGS };
+
+  // Thumbwheel
+  if (dev.thumbwheel) {
+    const tw = dev.thumbwheel;
+    const isVol = tw.divert === true;
+    let speed = 1;
+    if (tw.left && tw.left.interval) speed = tw.left.interval;
+    else if (tw.right && tw.right.interval) speed = tw.right.interval;
+    buttons.hscroll = {
+      mode: isVol ? 'volume' : 'scroll',
+      invert: tw.invert || false,
+      hires: true,
+      speed,
+    };
+  }
+
+  // Buttons
+  if (dev.buttons && Array.isArray(dev.buttons)) {
+    dev.buttons.forEach(bc => {
+      const btnId = CID_TO_BTN[bc.cid];
+      if (!btnId || !bc.action) return;
+      const a = bc.action;
+
+      if (a.type === 'Keypress') {
+        buttons[btnId] = { actionType: 'Keypress', keys: a.keys || [] };
+      } else if (a.type === 'ToggleSmartShift') {
+        buttons[btnId] = { actionType: 'ToggleSmartShift' };
+      } else if (a.type === 'Gestures') {
+        const gestures = {};
+        const pressAction = { keys: [] };
+        (a.gestures || []).forEach(g => {
+          if (g.direction === 'None' && g.mode === 'OnRelease') {
+            pressAction.keys = g.action?.keys || [];
+          } else if (g.direction) {
+            gestures[g.direction] = { keys: g.action?.keys || [] };
+          }
+        });
+        buttons[btnId] = {
+          actionType: 'Gestures',
+          pressAction,
+          gestures: {
+            Up:    gestures.Up    || { keys: [] },
+            Down:  gestures.Down  || { keys: [] },
+            Left:  gestures.Left  || { keys: [] },
+            Right: gestures.Right || { keys: [] },
+          },
+        };
+      }
+    });
+  }
+
+  return { global, buttons };
+}
+
+/* ── App ────────────────────────────────────────────────────────────── */
+
+function App() {
+  const [globalCfg, setGlobalCfg] = useState(DEFAULT_GLOBAL);
+  const [btnCfgs,   setBtnCfgs]   = useState(DEFAULT_BTN_CONFIGS);
+  const [selected,  setSelected]  = useState(null); // btn id or null
+  const [showCode,   setShowCode]   = useState(false);
+  const fileRef = useRef(null);
+
+  const handleLoadConfig = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = parseLogidConfig(ev.target.result);
+        const result = importConfig(parsed);
+        if (result) {
+          setGlobalCfg(result.global);
+          setBtnCfgs(result.buttons);
+          setSelected(null);
+        }
+      } catch (err) {
+        console.error('Failed to parse config:', err);
+      }
+      // reset so the same file can be re-loaded
+      if (fileRef.current) fileRef.current.value = '';
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const code = useMemo(
+    () => generateConfig(globalCfg, btnCfgs),
+    [globalCfg, btnCfgs]
+  );
+
+  const selectBtn = (id) => {
+    setSelected(id);
+  };
+
+  const changeBtnCfg = (id, cfg) => setBtnCfgs(p => ({ ...p, [id]: cfg }));
+
+  return (
+    <div
+      className="flex flex-col"
+      style={{ height: '100vh', background: '#09090b' }}
+    >
+      {/* ── Header ── */}
+      <header
+        className="flex-shrink-0 flex items-center justify-between px-6 py-3
+                   border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur z-30"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center
+                          bg-gradient-to-br from-cyan-500 to-blue-700 shadow-lg shadow-cyan-900/40">
+            <Icon.Mouse/>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white leading-none">Loguiops for MX Master 3S</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">logiops config generator by cma3il</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-zinc-600 hidden sm:block">Load or Save logid.cfg</span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".cfg,.conf,.txt"
+            className="hidden"
+            onChange={handleLoadConfig}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border
+                       border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200
+                       transition-all"
+          >
+            <Icon.Upload/>
+            <span>Load Config</span>
+          </button>
+          <button
+            onClick={() => setShowCode(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border
+                       border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200
+                       transition-all"
+          >
+            <Icon.Code/>
+            <span>Show Code</span>
+          </button>
+        </div>
+      </header>
+
+      {/* ── Main area — Global on LEFT, Button panel on RIGHT ── */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+
+        {/* Global settings panel (always visible, left) */}
+        <div
+          className="flex-shrink-0 w-72 border-r border-zinc-800/60 bg-zinc-950/70
+                     backdrop-blur overflow-hidden"
+          style={{ minWidth: '288px' }}
+        >
+          <div className="w-72 h-full">
+            <GlobalPanel
+              cfg={globalCfg}
+              onChange={setGlobalCfg}
+            />
+          </div>
+        </div>
+
+        {/* Mouse visual (center) */}
+        <div className="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden min-w-0">
+          {/* Ambient glow */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse 55% 45% at 50% 50%, rgba(6,182,212,0.04) 0%, transparent 70%)',
+            }}
+          />
+
+          <div className="relative w-full max-w-xl fade-in">
+            {/* Device title */}
+            <div className="text-center mb-3">
+              <p className="text-[10px] font-medium text-zinc-600 uppercase tracking-[0.2em]">Logitech</p>
+              <h2 className="text-xl font-light text-zinc-200">MX Master 3S</h2>
+            </div>
+
+            {/* Mouse image with overlays */}
+            <MouseVisual
+              selectedId={selected}
+              onSelect={selectBtn}
+            />
+
+            {/* Button legend */}
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {BUTTONS.map(btn => {
+                const cfg = btnCfgs[btn.id];
+                const active = selected === btn.id;
+                return (
+                  <button
+                    key={btn.id}
+                    onClick={() => selectBtn(active ? null : btn.id)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left
+                                transition-all text-xs hover-scale ${
+                      active
+                        ? 'border-cyan-500/50 bg-cyan-500/8 text-cyan-300'
+                        : 'border-zinc-800/80 bg-zinc-900/40 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      active ? 'bg-cyan-400' : 'bg-zinc-700'
+                    }`}/>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate text-[11px]">{btn.label}</p>
+                      <p className="font-mono text-[10px] text-zinc-600 truncate">
+                        {btn.isThumbWheel
+                          ? (cfg.mode === 'volume' ? 'Volume' : 'Scroll')
+                          : cfg.actionType}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Button settings panel (right side, visible when a button is selected) */}
+        <div
+          className={`flex-shrink-0 border-l border-zinc-800/60 bg-zinc-950/70
+                      backdrop-blur overflow-hidden transition-all duration-200 ${
+            selected !== null ? 'w-72' : 'w-0'
+          }`}
+          style={{ minWidth: selected !== null ? '288px' : '0' }}
+        >
+          {selected !== null && (
+            <div className="w-72 h-full">
+              <ButtonPanel
+                key={selected}
+                btnId={selected}
+                configs={btnCfgs}
+                onChangeCfg={changeBtnCfg}
+                onClose={() => setSelected(null)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Code Modal ── */}
+      {showCode && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Generated Config"
+          onClick={() => setShowCode(false)}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm fade-in" aria-hidden="true"/>
+
+          {/* Modal */}
+          <div
+            className="relative w-full max-w-3xl mx-4 flex flex-col bg-zinc-950
+                       border border-zinc-800 rounded-xl shadow-2xl modal-enter overflow-hidden"
+            style={{ maxHeight: '80vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60 flex-shrink-0">
+              <span className="text-sm font-semibold text-white">Generated Config</span>
+              <button
+                onClick={() => setShowCode(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-full
+                           bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-white transition-colors"
+              >
+                <Icon.X size={13}/>
+              </button>
+            </div>
+            {/* Modal body */}
+            <div className="flex-1 overflow-auto min-h-0">
+              <ConfigOutput code={code}/>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Mount ── */
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App/>);
+</script>
+</body>
+</html>
