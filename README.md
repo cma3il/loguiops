@@ -2,6 +2,10 @@
 
 A user-friendly, modern web interface for generating and editing `logiops` configuration files for the Logitech MX Master 3S on Linux.
 
+![loguiops screenshot](./screenshot.png)
+
+
+
 `loguiops` helps you visually configure mouse buttons, gestures, thumb wheel behavior, DPI, and SmartShift settings, then export the resulting config file for your system.
 
 ## Features
@@ -58,19 +62,7 @@ You can also serve it with a simple static server if preferred.
 2. Select an existing `.cfg` file
 3. The UI parses the file and populates controls
 4. Make changes and export updated output
-
-## Screenshot
-
-```md
-![loguiops screenshot](./assets/screenshot.png)
-```
-
-## Tech Stack
-
-- React (UMD build)
-- ReactDOM
-- Babel Standalone
-- Tailwind CSS CDN
+   
 
 ## Acknowledgements
 
