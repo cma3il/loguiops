@@ -8,6 +8,10 @@ A user-friendly, modern web interface for generating and editing `logiops` confi
 
 `loguiops` helps you visually configure mouse buttons, gestures, thumb wheel behavior, DPI, and SmartShift settings, then export the resulting config file for your system.
 
+### Try it out!
+A deployed version of the app is available on Vercel.  
+Try it here: https://loguiops.vercel.app/
+
 ## Features
 
 - Interactive MX Master 3S visual layout with clickable button zones
@@ -28,25 +32,17 @@ A user-friendly, modern web interface for generating and editing `logiops` confi
 - Copy generated config to clipboard
 - Download generated config as a file
 
-## Why loguiops?
-
-Editing `logiops` config files by hand can be error-prone. This project provides a cleaner workflow:
-
-1. Load your current config (optional)
-2. Tweak settings using the UI
-3. Review generated output
-4. Save and apply on your Linux system
 
 ## Usage
 
 ### Run locally
 
-This project is currently a single-page app in `index.html`.
+If you prefer to run it locally, this project is currently a single-page app in `index.html`.
 
 1. Clone the repository
 2. Open `index.html` in your browser
 
-You can also serve it with a simple static server if preferred.
+Or, you can also serve it with a simple static server if preferred.
 
 ### Generate a config
 
@@ -69,11 +65,6 @@ You can also serve it with a simple static server if preferred.
 - Backend project: [PixlOne/logiops](https://github.com/PixlOne/logiops)
 - Thanks to the logiops maintainers and contributors for building and maintaining the Linux daemon this UI targets.
 
-## Notes
-
-- This tool is focused on MX Master 3S mappings and common `logiops` workflows.
-- Always verify generated config syntax on your environment before applying.
-- For production hosting, consider bundling assets and replacing CDN runtime dependencies with pinned local builds.
 
 ## Trademarks
 
