@@ -2,7 +2,7 @@
 
 A user-friendly, modern web interface for generating and editing `logiops` configuration files for the Logitech MX Master 3S on Linux.
 
-![loguiops screenshot](./screenshot.png)
+![loguiops screenshot](./assets/screenshot.png)
 
 
 
